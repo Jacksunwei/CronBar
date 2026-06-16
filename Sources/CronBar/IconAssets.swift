@@ -2,6 +2,7 @@ import AppKit
 
 /// App imagery: the full-color icon (for the dropdown header) and a monochrome
 /// template glyph (for the menu bar, which the system tints for light/dark).
+@MainActor
 enum IconAssets {
     /// Full-color app icon (squircle + clock) loaded from bundled artwork.
     static let appIcon: NSImage? = {
