@@ -14,3 +14,6 @@ CronBar.app/
 
 # macOS
 .DS_Store
+
+# Release artifact (produced for GitHub releases)
+CronBar.app.zip
