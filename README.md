@@ -37,6 +37,14 @@ expected to run next.
 
 ## Install
 
+Via Homebrew:
+
+```sh
+brew install --cask jacksunwei/tap/cronbar
+```
+
+Or build from source:
+
 ```sh
 git clone https://github.com/Jacksunwei/CronBar.git
 cd CronBar
@@ -122,7 +130,29 @@ scripts/
   make-icon.sh              # builds AppIcon.icns from AppIcon.png
   clean-icon.swift          # strips baked-in checkerboard from a flat export
   build-app.sh              # packages CronBar.app
+  dev.sh                    # rebuild + relaunch for development
 ```
+
+## Releasing
+
+Releases are automated by [`.github/workflows/release.yml`](.github/workflows/release.yml),
+triggered by pushing a version tag:
+
+```sh
+# 1. Bump the version in Resources/Info.plist (CFBundleShortVersionString)
+# 2. Commit, then tag and push:
+git tag v0.2.0
+git push origin v0.2.0
+```
+
+The workflow builds `CronBar.app`, attaches `CronBar.app.zip` to a new GitHub
+Release, and updates the Homebrew cask (`version` + `sha256`) in
+`Jacksunwei/homebrew-tap`. The tag must match the Info.plist version or the
+build fails.
+
+Updating the tap requires a repository secret **`HOMEBREW_TAP_TOKEN`** — a token
+with `contents: write` on `Jacksunwei/homebrew-tap`. Without it, the release is
+still created and only the tap-update step is skipped.
 
 ## License
 

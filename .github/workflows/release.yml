@@ -1,0 +1,85 @@
+name: Release
+
+# Trigger by pushing a version tag, e.g.:
+#   (bump CFBundleShortVersionString in Resources/Info.plist first)
+#   git tag v0.2.0 && git push origin v0.2.0
+#
+# Steps:
+#   1. Build CronBar.app and zip it.
+#   2. Create a GitHub Release with the zip attached.
+#   3. Update the Homebrew cask (version + sha256) in Jacksunwei/homebrew-tap.
+#
+# Requires a repository secret HOMEBREW_TAP_TOKEN: a token (classic PAT or
+# fine-grained) with "contents: write" permission on Jacksunwei/homebrew-tap.
+# Without it, the tap-update step is skipped (the release is still created).
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Use latest Xcode (Swift 6)
+        run: sudo xcode-select -switch /Applications/Xcode.app
+
+      - name: Show toolchain
+        run: swift --version
+
+      - name: Verify Info.plist version matches tag
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          PLIST_VERSION=$(/usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" Resources/Info.plist)
+          echo "tag=$VERSION  Info.plist=$PLIST_VERSION"
+          if [ "$VERSION" != "$PLIST_VERSION" ]; then
+            echo "::error::Tag ($VERSION) does not match Info.plist CFBundleShortVersionString ($PLIST_VERSION)"
+            exit 1
+          fi
+
+      - name: Build app bundle
+        run: ./scripts/build-app.sh
+
+      - name: Package and checksum
+        id: package
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          ditto -c -k --sequesterRsrc --keepParent CronBar.app CronBar.app.zip
+          SHA=$(shasum -a 256 CronBar.app.zip | awk '{print $1}')
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "sha256=$SHA" >> "$GITHUB_OUTPUT"
+          echo "Built $VERSION  sha256=$SHA"
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" CronBar.app.zip \
+            --title "CronBar ${GITHUB_REF_NAME#v}" \
+            --generate-notes
+
+      - name: Update Homebrew tap cask
+        env:
+          TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          VERSION: ${{ steps.package.outputs.version }}
+          SHA256: ${{ steps.package.outputs.sha256 }}
+        run: |
+          if [ -z "$TAP_TOKEN" ]; then
+            echo "::warning::HOMEBREW_TAP_TOKEN not set; skipping tap update."
+            exit 0
+          fi
+          git clone "https://x-access-token:${TAP_TOKEN}@github.com/Jacksunwei/homebrew-tap.git" tap
+          CASK="tap/Casks/cronbar.rb"
+          sed -i '' -E "s/^  version \".*\"/  version \"${VERSION}\"/" "$CASK"
+          sed -i '' -E "s/^  sha256 \".*\"/  sha256 \"${SHA256}\"/" "$CASK"
+          git -C tap \
+            -c user.name="github-actions[bot]" \
+            -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit -am "Update cronbar to ${VERSION}"
+          git -C tap push
