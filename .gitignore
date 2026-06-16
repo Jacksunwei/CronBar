@@ -1,0 +1,16 @@
+# Swift Package Manager
+.build/
+.swiftpm/
+Package.resolved
+
+# Built app bundle (produced by scripts/build-app.sh)
+CronBar.app/
+
+# Editor / tooling
+.vscode/
+
+# Agent/tool state
+.remember/
+
+# macOS
+.DS_Store
