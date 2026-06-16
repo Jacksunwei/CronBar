@@ -46,6 +46,10 @@ struct ContentView: View {
         .onDisappear { stopAutoRefresh() }
     }
 
+    private func openSettings() {
+        SettingsWindowController.shared.show()
+    }
+
     // MARK: Auto-refresh (only while the panel is open)
 
     private func startAutoRefresh() {
@@ -79,6 +83,9 @@ struct ContentView: View {
             }
             Spacer()
             RefreshButton(isRefreshing: manager.isRefreshing) { manager.refresh() }
+            HeaderIconButton(systemName: "gearshape", help: "Settings") {
+                openSettings()
+            }
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
@@ -219,6 +226,30 @@ struct RefreshButton: View {
         .disabled(isRefreshing)
         .onHover { hovering = $0 }
         .help("Refresh")
+    }
+}
+
+// MARK: - Header icon button
+
+struct HeaderIconButton: View {
+    let systemName: String
+    let help: String
+    let action: () -> Void
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: systemName)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(hovering ? Theme.accent : .secondary)
+                .frame(width: 26, height: 26)
+                .background(
+                    Circle().fill(hovering ? Theme.accent.opacity(0.12) : Color.clear)
+                )
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
+        .help(help)
     }
 }
 
