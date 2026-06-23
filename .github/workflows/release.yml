@@ -2,16 +2,21 @@ name: Release
 
 # Trigger by pushing a version tag, e.g.:
 #   (bump CFBundleShortVersionString in Resources/Info.plist first)
-#   git tag v0.2.0 && git push origin v0.2.0
+#   git tag v1.0.0 && git push origin v1.0.0
 #
 # Steps:
-#   1. Build CronBar.app and zip it.
-#   2. Create a GitHub Release with the zip attached.
+#   1. Build CronBar.app, sign with Developer ID, notarize, and staple.
+#   2. Create a GitHub Release with the notarized zip attached.
 #   3. Update the Homebrew cask (version + sha256) in Jacksunwei/homebrew-tap.
 #
-# Requires a repository secret HOMEBREW_TAP_TOKEN: a token (classic PAT or
-# fine-grained) with "contents: write" permission on Jacksunwei/homebrew-tap.
-# Without it, the tap-update step is skipped (the release is still created).
+# Required repository secrets:
+#   DEVELOPER_ID_CERT_P12       base64 of the exported "Developer ID Application"
+#                               certificate (.p12, including its private key)
+#   DEVELOPER_ID_CERT_PASSWORD  password used when exporting the .p12
+#   APPLE_ID                    Apple ID email for notarization
+#   APPLE_TEAM_ID               Developer Team ID (e.g. JXNAJH52AT)
+#   APPLE_APP_PASSWORD          app-specific password for the Apple ID
+#   HOMEBREW_TAP_TOKEN          token with contents:write on Jacksunwei/homebrew-tap
 
 on:
   push:
@@ -43,8 +48,55 @@ jobs:
             exit 1
           fi
 
-      - name: Build app bundle
+      - name: Import Developer ID certificate
+        env:
+          CERT_P12_BASE64: ${{ secrets.DEVELOPER_ID_CERT_P12 }}
+          CERT_PASSWORD: ${{ secrets.DEVELOPER_ID_CERT_PASSWORD }}
+        run: |
+          CERT_PATH="$RUNNER_TEMP/devid.p12"
+          KEYCHAIN_PATH="$RUNNER_TEMP/build.keychain-db"
+          KEYCHAIN_PASSWORD=$(openssl rand -base64 24)
+
+          echo "$CERT_P12_BASE64" | base64 --decode > "$CERT_PATH"
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security import "$CERT_PATH" -P "$CERT_PASSWORD" -A -t cert -f pkcs12 \
+            -T /usr/bin/codesign -k "$KEYCHAIN_PATH"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: \
+            -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH" >/dev/null
+          security list-keychain -d user -s "$KEYCHAIN_PATH" login.keychain-db
+
+          IDENTITY=$(security find-identity -v -p codesigning "$KEYCHAIN_PATH" \
+            | awk -F'"' '/Developer ID Application/{print $2; exit}')
+          if [ -z "$IDENTITY" ]; then
+            echo "::error::No Developer ID Application identity found in imported keychain"
+            exit 1
+          fi
+          echo "SIGN_IDENTITY=$IDENTITY" >> "$GITHUB_ENV"
+          echo "Imported identity: $IDENTITY"
+
+      - name: Build and sign app
+        env:
+          CODESIGN_IDENTITY: ${{ env.SIGN_IDENTITY }}
         run: ./scripts/build-app.sh
+
+      - name: Notarize and staple
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+        run: |
+          ditto -c -k --keepParent CronBar.app notarize.zip
+          xcrun notarytool submit notarize.zip \
+            --apple-id "$APPLE_ID" \
+            --team-id "$APPLE_TEAM_ID" \
+            --password "$APPLE_APP_PASSWORD" \
+            --wait
+          xcrun stapler staple CronBar.app
+          xcrun stapler validate CronBar.app
+          spctl -a -vvv -t install CronBar.app
 
       - name: Package and checksum
         id: package

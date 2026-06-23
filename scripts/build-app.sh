@@ -30,8 +30,17 @@ if [ -d ".build/$CONFIG/CronBar_CronBar.bundle" ]; then
     cp -R ".build/$CONFIG/CronBar_CronBar.bundle" "$APP/Contents/Resources/"
 fi
 
-# Ad-hoc code signature so macOS is happy to launch it locally.
-codesign --force --sign - "$APP" >/dev/null 2>&1 || true
+# Code signing. Set CODESIGN_IDENTITY to a "Developer ID Application: ..."
+# identity to produce a distributable (hardened-runtime, timestamped) signature;
+# otherwise an ad-hoc signature is used for local runs.
+IDENTITY="${CODESIGN_IDENTITY:--}"
+if [ "$IDENTITY" = "-" ]; then
+    codesign --force --sign - "$APP" >/dev/null 2>&1 || true
+    echo "Signed ad-hoc."
+else
+    codesign --force --options runtime --timestamp --sign "$IDENTITY" "$APP"
+    echo "Signed with: $IDENTITY"
+fi
 
 echo "Built $APP"
 echo "Run it with:  open $APP"
