@@ -6,7 +6,8 @@ import AppKit
 enum IconAssets {
     /// Full-color app icon (squircle + clock) loaded from bundled artwork.
     static let appIcon: NSImage? = {
-        guard let url = Bundle.module.url(forResource: "AppIcon", withExtension: "png") else {
+        guard let bundle = Bundle.customModule,
+              let url = bundle.url(forResource: "AppIcon", withExtension: "png") else {
             return nil
         }
         return NSImage(contentsOf: url)
@@ -51,4 +52,37 @@ enum IconAssets {
         image.isTemplate = true
         return image
     }()
+}
+
+extension Bundle {
+    /// A robust, non-crashing replacement for SPM's auto-generated `Bundle.module`.
+    /// Attempts to find `CronBar_CronBar.bundle` inside standard macOS app layouts
+    /// and command-line build structures without ever triggering an assertion or fatalError.
+    static var customModule: Bundle? {
+        // 1. Try App Bundle (Contents/Resources)
+        if let resourceURL = Bundle.main.resourceURL {
+            let bundleURL = resourceURL.appendingPathComponent("CronBar_CronBar.bundle")
+            if let b = Bundle(url: bundleURL) {
+                return b
+            }
+        }
+        
+        // 2. Try Command Line / Build directory (parallel to main bundle or executable)
+        let mainBundleURL = Bundle.main.bundleURL
+        let bundleURL = mainBundleURL.appendingPathComponent("CronBar_CronBar.bundle")
+        if let b = Bundle(url: bundleURL) {
+            return b
+        }
+        
+        // 3. Try fallback to sibling of the executable (for command-line tools)
+        let executableURL = Bundle.main.executableURL
+        if let execDir = executableURL?.deletingLastPathComponent() {
+            let siblingURL = execDir.appendingPathComponent("CronBar_CronBar.bundle")
+            if let b = Bundle(url: siblingURL) {
+                return b
+            }
+        }
+        
+        return nil
+    }
 }

@@ -26,8 +26,22 @@ cp Resources/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
 
 # Bundle the SPM resource bundle (contains AppIcon.png) so Bundle.module
 # resolves at runtime inside the .app.
+BUNDLE_SRC=""
 if [ -d ".build/$CONFIG/CronBar_CronBar.bundle" ]; then
-    cp -R ".build/$CONFIG/CronBar_CronBar.bundle" "$APP/Contents/Resources/"
+    BUNDLE_SRC=".build/$CONFIG/CronBar_CronBar.bundle"
+else
+    # Try to find the bundle dynamically inside the .build folder
+    FOUND_BUNDLE=$(find .build -name "CronBar_CronBar.bundle" -type d | head -n 1)
+    if [ -n "$FOUND_BUNDLE" ]; then
+        BUNDLE_SRC="$FOUND_BUNDLE"
+    fi
+fi
+
+if [ -n "$BUNDLE_SRC" ]; then
+    cp -R "$BUNDLE_SRC" "$APP/Contents/Resources/"
+    echo "Bundled resources from: $BUNDLE_SRC"
+else
+    echo "Warning: CronBar_CronBar.bundle not found!"
 fi
 
 # Code signing. Set CODESIGN_IDENTITY to a "Developer ID Application: ..."
